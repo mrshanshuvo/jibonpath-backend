@@ -243,7 +243,7 @@ Driver ──< Dispatch
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/mrshanshuvo/ambulance-dispatch-backend.git
+git clone https://github.com/mrshanshuvo/jibonpath-backend.git
 cd ambulance-dispatch-backend
 ```
 
