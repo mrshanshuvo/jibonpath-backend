@@ -29,7 +29,11 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (e.g. mobile apps, curl, Postman, server-to-server)
       if (!origin) return callback(null, true);
-      if (envConfig.corsOrigins.includes(origin)) {
+      const cleanOrigin = origin.replace(/\/+$/, "");
+      if (
+        envConfig.corsOrigins.includes(cleanOrigin) ||
+        envConfig.corsOrigins.includes(origin)
+      ) {
         return callback(null, true);
       }
       return callback(null, false);

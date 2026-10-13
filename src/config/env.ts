@@ -7,7 +7,7 @@ const parseOrigins = (raw?: string): string[] => {
   if (!raw) return [];
   return raw
     .split(",")
-    .map((origin) => origin.trim())
+    .map((origin) => origin.trim().replace(/\/+$/, ""))
     .filter(Boolean);
 };
 
@@ -15,7 +15,9 @@ export const envConfig = {
   env: process.env.NODE_ENV || "development",
   port: Number(process.env.PORT) || 5000,
   clientUrl:
-    process.env.CLIENT_URL ||
+    (process.env.CLIENT_URL
+      ? process.env.CLIENT_URL.trim().replace(/\/+$/, "")
+      : "") ||
     (process.env.NODE_ENV === "production"
       ? "https://jibonpath.vercel.app"
       : "http://localhost:3000"),
