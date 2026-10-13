@@ -14,9 +14,14 @@ const parseOrigins = (raw?: string): string[] => {
 export const envConfig = {
   env: process.env.NODE_ENV || "development",
   port: Number(process.env.PORT) || 5000,
-  clientUrl: process.env.CLIENT_URL || "http://localhost:3000",
+  clientUrl:
+    process.env.CLIENT_URL ||
+    (process.env.NODE_ENV === "production"
+      ? "https://jibonpath.vercel.app"
+      : "http://localhost:3000"),
   corsOrigins: Array.from(
     new Set([
+      "https://jibonpath.vercel.app",
       ...parseOrigins(process.env.CORS_ORIGINS),
       ...parseOrigins(process.env.CLIENT_URL),
       "http://localhost:3000",
