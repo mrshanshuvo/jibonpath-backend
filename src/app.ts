@@ -18,8 +18,33 @@ import userRoutes from "./modules/user/user.routes";
 const app = express();
 
 // Security & Headers
-app.use(helmet());
-app.use(cors({ origin: envConfig.clientUrl, credentials: true }));
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+);
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. mobile apps, curl, Postman, server-to-server)
+      if (!origin) return callback(null, true);
+      if (envConfig.corsOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+    ],
+    optionsSuccessStatus: 204,
+  }),
+);
 
 // Rate limiting (generous in development for automated E2E tests)
 app.use(
