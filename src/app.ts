@@ -58,8 +58,14 @@ app.use(
   }),
 );
 
-// Body parsing (for all routes)
-app.use(express.json());
+// Body parsing (for all routes, preserving raw buffer for webhook verification)
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as { rawBody?: Buffer }).rawBody = buf;
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: true }));
 
 // Root Welcome / API Info Endpoint
