@@ -18,14 +18,54 @@ import userRoutes from "./modules/user/user.routes";
 const app = express();
 
 // Security & Headers
-app.use(helmet());
-app.use(cors({ origin: envConfig.clientUrl, credentials: true }));
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+);
 
-// Rate limiting (100 requests per 15 min window)
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 100 }));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. mobile apps, curl, Postman, server-to-server)
+      if (!origin) return callback(null, true);
+      const cleanOrigin = origin.replace(/\/+$/, "");
+      if (
+        envConfig.corsOrigins.includes(cleanOrigin) ||
+        envConfig.corsOrigins.includes(origin)
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, false);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+    ],
+    optionsSuccessStatus: 204,
+  }),
+);
 
-// Body parsing (for all routes)
-app.use(express.json());
+// Rate limiting (generous in development for automated E2E tests)
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: process.env.NODE_ENV === "development" ? 10000 : 100,
+  }),
+);
+
+// Body parsing (for all routes, preserving raw buffer for webhook verification)
+app.use(
+  express.json({
+    verify: (req, _res, buf) => {
+      (req as { rawBody?: Buffer }).rawBody = buf;
+    },
+  }),
+);
 app.use(express.urlencoded({ extended: true }));
 
 // Root Welcome / API Info Endpoint

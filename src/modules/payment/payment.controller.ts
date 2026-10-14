@@ -199,8 +199,13 @@ export const stripeWebhook = asyncHandler(
     if (!signature || typeof signature !== "string") {
       throw new AppError("Missing stripe-signature header", 400);
     }
+    const rawBody =
+      (req as unknown as { rawBody?: Buffer }).rawBody ||
+      (Buffer.isBuffer(req.body)
+        ? req.body
+        : Buffer.from(JSON.stringify(req.body)));
     const result = await paymentService.handleStripeWebhook(
-      req.body as Buffer,
+      rawBody,
       signature,
       envConfig.stripe.webhookSecret,
     );

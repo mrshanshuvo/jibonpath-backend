@@ -22,12 +22,13 @@
 
 ## 🌐 Live URLs
 
-| Resource         | URL                                                         |
-| ---------------- | ----------------------------------------------------------- |
-| **API Base**     | https://ambulance-dispatch-backend-66f2.onrender.com        |
-| **Health Check** | https://ambulance-dispatch-backend-66f2.onrender.com/health |
-| **Postman Docs** | https://documenter.getpostman.com/view/47434753/2sBYAvwWcJ  |
-| **GitHub**       | https://github.com/mrshanshuvo/ambulance-dispatch-backend   |
+| Resource          | URL                                                         |
+| ----------------- | ----------------------------------------------------------- |
+| **Live Frontend** | https://jibonpath.vercel.app                                |
+| **API Base**      | https://ambulance-dispatch-backend-66f2.onrender.com        |
+| **Health Check**  | https://ambulance-dispatch-backend-66f2.onrender.com/health |
+| **Postman Docs**  | https://documenter.getpostman.com/view/47434753/2sBYAvwWcJ  |
+| **GitHub**        | https://github.com/mrshanshuvo/ambulance-dispatch-backend   |
 
 ---
 
@@ -243,7 +244,7 @@ Driver ──< Dispatch
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/mrshanshuvo/ambulance-dispatch-backend.git
+git clone https://github.com/mrshanshuvo/jibonpath-backend.git
 cd ambulance-dispatch-backend
 ```
 

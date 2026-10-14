@@ -17,7 +17,7 @@ const router = Router();
 // Stricter rate limiter for sensitive authentication endpoints (15 attempts per 15 minutes)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 15,
+  max: process.env.NODE_ENV === "development" ? 1000 : 15,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
