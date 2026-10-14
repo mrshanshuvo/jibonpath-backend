@@ -6,6 +6,8 @@ export const createRequestSchema = z.object({
     pickupAddress: z.string().min(5, "Pickup address is required"),
     pickupLat: z.number().optional(),
     pickupLng: z.number().optional(),
+    contactPhone: z.string().optional(),
+    hospitalName: z.string().optional(),
     description: z.string().optional(),
   }),
 });

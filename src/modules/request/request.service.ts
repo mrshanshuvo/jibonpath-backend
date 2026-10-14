@@ -15,8 +15,37 @@ export const createRequest = async (
     throw new AppError("You already have an active pending request", 409);
   }
 
+  // Format destination and callback notes into description if provided
+  const noteParts: string[] = [];
+  if (data.hospitalName && data.hospitalName !== "Closest Available Emergency Room") {
+    noteParts.push(`[Hospital: ${data.hospitalName}]`);
+  }
+  if (data.contactPhone) {
+    noteParts.push(`[Callback: ${data.contactPhone}]`);
+  }
+  if (data.description?.trim()) {
+    noteParts.push(data.description.trim());
+  }
+
+  const finalDescription = noteParts.length > 0 ? noteParts.join(" ") : null;
+
+  // Persist callback phone to user profile if not previously set
+  if (data.contactPhone) {
+    await prisma.user.updateMany({
+      where: { id: callerId, phone: null },
+      data: { phone: data.contactPhone },
+    });
+  }
+
   return prisma.emergencyRequest.create({
-    data: { callerId, ...data },
+    data: {
+      callerId,
+      priority: data.priority,
+      pickupAddress: data.pickupAddress,
+      pickupLat: data.pickupLat,
+      pickupLng: data.pickupLng,
+      description: finalDescription,
+    },
   });
 };
 
