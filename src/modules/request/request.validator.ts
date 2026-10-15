@@ -7,6 +7,8 @@ export const createRequestSchema = z.object({
     pickupLat: z.number().optional(),
     pickupLng: z.number().optional(),
     description: z.string().optional(),
+    contactPhone: z.string().optional(),
+    hospitalName: z.string().optional(),
   }),
 });
 

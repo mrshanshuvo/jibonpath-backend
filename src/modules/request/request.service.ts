@@ -15,8 +15,44 @@ export const createRequest = async (
     throw new AppError("You already have an active pending request", 409);
   }
 
+  const {
+    priority,
+    pickupAddress,
+    pickupLat,
+    pickupLng,
+    description,
+    contactPhone,
+    hospitalName,
+  } = data;
+
+  // Format notes with callback phone and hospital destination cleanly
+  const notes = [
+    description?.trim(),
+    contactPhone?.trim() ? `Callback Phone: ${contactPhone.trim()}` : null,
+    hospitalName?.trim() ? `Destination: ${hospitalName.trim()}` : null,
+  ]
+    .filter(Boolean)
+    .join(" | ");
+
   return prisma.emergencyRequest.create({
-    data: { callerId, ...data },
+    data: {
+      callerId,
+      priority,
+      pickupAddress,
+      pickupLat,
+      pickupLng,
+      description: notes || null,
+    },
+    include: {
+      caller: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+        },
+      },
+    },
   });
 };
 
