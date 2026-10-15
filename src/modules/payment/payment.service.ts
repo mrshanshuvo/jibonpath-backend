@@ -295,6 +295,73 @@ export const executeBkashPayment = async (
   };
 };
 
+// ─── Process bKash Browser Callback ───────────────────────────────────────────
+
+export const processBkashCallback = async (
+  paymentID: string,
+  status: string,
+) => {
+  const payment = await prisma.payment.findFirst({
+    where: { sessionId: paymentID },
+  });
+
+  const normalizedStatus = (status || "").toLowerCase();
+
+  if (normalizedStatus === "success") {
+    if (payment?.status === "SUCCESS") {
+      return {
+        success: true,
+        requestId: payment.requestId,
+        paymentID,
+        trxID: payment.gatewayTxnId || "",
+      };
+    }
+
+    const execRes = await bkashHelper.executeBkashPayment(paymentID);
+
+    if (payment) {
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: "SUCCESS",
+          gatewayTxnId: execRes.trxID,
+        },
+      });
+
+      await prisma.emergencyRequest.updateMany({
+        where: {
+          id: payment.requestId,
+          status: { in: ["DISPATCHED", "PENDING"] },
+        },
+        data: { status: "COMPLETED" },
+      });
+    }
+
+    return {
+      success: true,
+      requestId: payment?.requestId,
+      paymentID,
+      trxID: execRes.trxID,
+    };
+  }
+
+  if (payment && payment.status === "PENDING") {
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: "FAILED",
+      },
+    });
+  }
+
+  return {
+    success: false,
+    requestId: payment?.requestId,
+    paymentID,
+    status: normalizedStatus || "failure",
+  };
+};
+
 // ─── Initialize SSLCommerz Payment ───────────────────────────────────────────
 
 export const initSSLCommerzPayment = async (

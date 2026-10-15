@@ -48,6 +48,9 @@ router.post(
   paymentController.executeBkash,
 );
 
+// ALL /api/v1/payments/bkash/callback — bKash browser redirect callback (no auth, gateway redirect)
+router.all("/bkash/callback", paymentController.bkashCallback);
+
 // POST /api/v1/payments/sslcommerz/initiate — Patient initializes SSLCommerz payment
 router.post(
   "/sslcommerz/initiate",
@@ -57,14 +60,14 @@ router.post(
   paymentController.initSSLCommerz,
 );
 
-// POST /api/v1/payments/sslcommerz/success — SSLCommerz browser return (success)
-router.post("/sslcommerz/success", paymentController.sslcommerzSuccess);
+// ALL /api/v1/payments/sslcommerz/success — SSLCommerz browser return (success)
+router.all("/sslcommerz/success", paymentController.sslcommerzSuccess);
 
-// POST /api/v1/payments/sslcommerz/fail — SSLCommerz browser return (fail)
-router.post("/sslcommerz/fail", paymentController.sslcommerzFail);
+// ALL /api/v1/payments/sslcommerz/fail — SSLCommerz browser return (fail)
+router.all("/sslcommerz/fail", paymentController.sslcommerzFail);
 
-// POST /api/v1/payments/sslcommerz/cancel — SSLCommerz browser return (cancel)
-router.post("/sslcommerz/cancel", paymentController.sslcommerzCancel);
+// ALL /api/v1/payments/sslcommerz/cancel — SSLCommerz browser return (cancel)
+router.all("/sslcommerz/cancel", paymentController.sslcommerzCancel);
 
 // POST /api/v1/payments/sslcommerz/ipn — SSLCommerz IPN webhook
 router.post("/sslcommerz/ipn", paymentController.sslcommerzIPN);
