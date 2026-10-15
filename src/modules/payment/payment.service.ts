@@ -442,6 +442,8 @@ export const initSSLCommerzPayment = async (
   return {
     gatewayUrl: sslRes.GatewayPageURL,
     gatewayPageURL: sslRes.GatewayPageURL,
+    GatewayPageURL: sslRes.GatewayPageURL,
+    url: sslRes.GatewayPageURL,
     sessionKey: sslRes.sessionkey,
     sessionkey: sslRes.sessionkey,
     amount: finalAmount,
@@ -482,12 +484,25 @@ export const finalizeSSLCommerzPayment = async (
 // ─── Get Payment Status for a Request ────────────────────────────────────────
 
 export const getPaymentByRequestId = async (
-  requestId: string,
+  identifier: string,
   callerId: string,
   role: string,
 ) => {
+  // 1. Check if identifier is a payment ID, session ID, or requestId
+  let payment = await prisma.payment.findFirst({
+    where: {
+      OR: [
+        { id: identifier },
+        { requestId: identifier },
+        { sessionId: identifier },
+      ],
+    },
+  });
+
+  const effectiveRequestId = payment?.requestId || identifier;
+
   const request = await prisma.emergencyRequest.findFirst({
-    where: { id: requestId, deletedAt: null },
+    where: { id: effectiveRequestId, deletedAt: null },
   });
   if (!request) throw new AppError("Emergency request not found", 404);
 
@@ -495,9 +510,12 @@ export const getPaymentByRequestId = async (
     throw new AppError("Access denied", 403);
   }
 
-  const payment = await prisma.payment.findUnique({
-    where: { requestId },
-  });
+  if (!payment) {
+    payment = await prisma.payment.findUnique({
+      where: { requestId: effectiveRequestId },
+    });
+  }
+
   if (!payment) throw new AppError("No payment found for this request", 404);
 
   return payment;
