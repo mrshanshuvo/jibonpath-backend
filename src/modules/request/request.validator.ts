@@ -18,6 +18,8 @@ export const listRequestSchema = z.object({
       .enum(["PENDING", "DISPATCHED", "CANCELLED", "COMPLETED"])
       .optional(),
     priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).optional(),
+    search: z.string().optional(),
+    q: z.string().optional(),
     page: z.string().optional(),
     limit: z.string().optional(),
   }),

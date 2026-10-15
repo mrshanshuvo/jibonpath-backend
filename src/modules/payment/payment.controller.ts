@@ -1,11 +1,11 @@
 import type { Request, Response } from "express";
+import { prisma } from "../../config/db";
 import { envConfig } from "../../config/env";
 import { AppError } from "../../utils/AppError";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { logAudit } from "../../utils/auditLogger";
 import { sendSuccess } from "../../utils/response";
 import * as paymentService from "./payment.service";
-import { prisma } from "../../config/db";
 
 // POST /api/v1/payments/stripe/checkout
 export const createCheckout = asyncHandler(
@@ -292,10 +292,7 @@ export const getMyPayments = asyncHandler(
       req.user.role,
       req,
     );
-    sendSuccess(res, "Payment history fetched successfully", {
-      payments: result.payments,
-      meta: result.meta,
-    });
+    sendSuccess(res, "Payment history fetched successfully", result);
   },
 );
 

@@ -1,7 +1,7 @@
 import type { Request } from "express";
 import { prisma } from "../../config/db";
 import { AppError } from "../../utils/AppError";
-import { buildMeta, getPagination } from "../../utils/pagination";
+import { createPaginatedResponse, getPagination } from "../../utils/pagination";
 import type {
   CreateDispatchInput,
   UpdateDispatchStatusInput,
@@ -128,7 +128,7 @@ export const updateDispatchStatus = async (
 };
 
 export const listDispatches = async (req: Request) => {
-  const { page, limit, skip } = getPagination(req);
+  const { limit, skip, search } = getPagination(req);
   const { status } = req.query as { status?: string };
 
   let driverIdFilter: string | undefined;
@@ -142,10 +142,25 @@ export const listDispatches = async (req: Request) => {
     driverIdFilter = driver.id;
   }
 
-  const where = {
+  const where: Record<string, unknown> = {
     ...(status && { status: status as never }),
     ...(driverIdFilter && { driverId: driverIdFilter }),
   };
+
+  if (search) {
+    where.OR = [
+      {
+        ambulance: { vehicleNumber: { contains: search, mode: "insensitive" } },
+      },
+      { driver: { licenseNumber: { contains: search, mode: "insensitive" } } },
+      { driver: { user: { name: { contains: search, mode: "insensitive" } } } },
+      {
+        driver: { user: { email: { contains: search, mode: "insensitive" } } },
+      },
+      { request: { pickupAddress: { contains: search, mode: "insensitive" } } },
+      { hospital: { name: { contains: search, mode: "insensitive" } } },
+    ];
+  }
 
   const [total, dispatches] = await Promise.all([
     prisma.dispatch.count({ where }),
@@ -194,10 +209,7 @@ export const listDispatches = async (req: Request) => {
     }),
   ]);
 
-  return {
-    dispatches,
-    meta: buildMeta(page, limit, total),
-  };
+  return createPaginatedResponse(req, dispatches, total, "dispatches");
 };
 
 export const getMyActiveDispatch = async (userId: string) => {

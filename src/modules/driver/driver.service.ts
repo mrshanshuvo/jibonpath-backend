@@ -1,7 +1,7 @@
 import type { Request } from "express";
 import { prisma } from "../../config/db";
 import { AppError } from "../../utils/AppError";
-import { buildMeta, getPagination } from "../../utils/pagination";
+import { createPaginatedResponse, getPagination } from "../../utils/pagination";
 import type { CreateDriverInput, UpdateDriverInput } from "./driver.validator";
 
 export const createDriver = async (data: CreateDriverInput) => {
@@ -24,7 +24,7 @@ export const createDriver = async (data: CreateDriverInput) => {
 };
 
 export const listDrivers = async (req: Request) => {
-  const { page, limit, skip } = getPagination(req);
+  const { limit, skip, search } = getPagination(req);
   const isAvailable =
     req.query.isAvailable === "true"
       ? true
@@ -32,10 +32,19 @@ export const listDrivers = async (req: Request) => {
         ? false
         : undefined;
 
-  const where = {
+  const where: Record<string, unknown> = {
     deletedAt: null,
     ...(isAvailable !== undefined && { isAvailable }),
   };
+
+  if (search) {
+    where.OR = [
+      { licenseNumber: { contains: search, mode: "insensitive" } },
+      { user: { name: { contains: search, mode: "insensitive" } } },
+      { user: { email: { contains: search, mode: "insensitive" } } },
+      { user: { phone: { contains: search, mode: "insensitive" } } },
+    ];
+  }
 
   const [drivers, total] = await Promise.all([
     prisma.driver.findMany({
@@ -53,7 +62,7 @@ export const listDrivers = async (req: Request) => {
     prisma.driver.count({ where }),
   ]);
 
-  return { drivers, meta: buildMeta(page, limit, total) };
+  return createPaginatedResponse(req, drivers, total, "drivers");
 };
 
 export const getDriverById = async (id: string) => {

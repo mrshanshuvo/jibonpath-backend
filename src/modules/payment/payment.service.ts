@@ -8,7 +8,7 @@ import {
   type FareBreakdown,
   calculateTripFare,
 } from "../../utils/fareCalculator";
-import { buildMeta, getPagination } from "../../utils/pagination";
+import { createPaginatedResponse, getPagination } from "../../utils/pagination";
 import * as sslcommerzHelper from "../../utils/sslcommerz";
 import type {
   CreateBkashCheckoutInput,
@@ -610,10 +610,10 @@ export const getMyPayments = async (
   userRole: string,
   req: Request,
 ) => {
-  const { page, limit, skip } = getPagination(req);
+  const { limit, skip, search } = getPagination(req);
   const { status } = req.query as { status?: string };
 
-  const where = {
+  const where: Record<string, unknown> = {
     ...(userRole !== "ADMIN" && {
       request: {
         callerId: userId,
@@ -622,6 +622,29 @@ export const getMyPayments = async (
     }),
     ...(status && { status: status as never }),
   };
+
+  if (search) {
+    where.OR = [
+      { gatewayTxnId: { contains: search, mode: "insensitive" } },
+      { sessionId: { contains: search, mode: "insensitive" } },
+      { request: { pickupAddress: { contains: search, mode: "insensitive" } } },
+      {
+        request: {
+          caller: { name: { contains: search, mode: "insensitive" } },
+        },
+      },
+      {
+        request: {
+          caller: { email: { contains: search, mode: "insensitive" } },
+        },
+      },
+      {
+        request: {
+          caller: { phone: { contains: search, mode: "insensitive" } },
+        },
+      },
+    ];
+  }
 
   const [total, payments] = await Promise.all([
     prisma.payment.count({ where }),
@@ -652,8 +675,5 @@ export const getMyPayments = async (
     }),
   ]);
 
-  return {
-    payments,
-    meta: buildMeta(page, limit, total),
-  };
+  return createPaginatedResponse(req, payments, total, "payments");
 };

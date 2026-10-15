@@ -14,3 +14,24 @@ export const createAdminDriverSchema = z.object({
 export type CreateAdminDriverInput = z.infer<
   typeof createAdminDriverSchema
 >["body"];
+
+export const listUsersSchema = z.object({
+  query: z.object({
+    role: z.enum(["PATIENT", "DRIVER", "ADMIN"]).optional(),
+    search: z.string().optional(),
+    q: z.string().optional(),
+    page: z.string().optional(),
+    limit: z.string().optional(),
+  }),
+});
+
+export const listAuditLogsSchema = z.object({
+  query: z.object({
+    action: z.string().optional(),
+    entityType: z.string().optional(),
+    search: z.string().optional(),
+    q: z.string().optional(),
+    page: z.string().optional(),
+    limit: z.string().optional(),
+  }),
+});

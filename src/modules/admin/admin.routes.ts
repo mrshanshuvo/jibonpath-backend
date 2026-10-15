@@ -7,10 +7,14 @@ import { validate } from "../../middlewares/validate.middleware";
 import { AppError } from "../../utils/AppError";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { logAudit } from "../../utils/auditLogger";
-import { buildMeta, getPagination } from "../../utils/pagination";
+import { createPaginatedResponse, getPagination } from "../../utils/pagination";
 import { sendSuccess } from "../../utils/response";
 import * as adminService from "./admin.service";
-import { createAdminDriverSchema } from "./admin.validator";
+import {
+  createAdminDriverSchema,
+  listAuditLogsSchema,
+  listUsersSchema,
+} from "./admin.validator";
 
 const router = Router();
 
@@ -34,9 +38,10 @@ router.post(
 // GET /api/v1/admin/users — List all users with pagination + search
 router.get(
   "/users",
+  validate(listUsersSchema),
   asyncHandler(async (req, res) => {
-    const { page, limit, skip } = getPagination(req);
-    const { search, role } = req.query as { search?: string; role?: string };
+    const { page, limit, skip, search } = getPagination(req);
+    const { role } = req.query as { role?: string };
 
     const where = {
       deletedAt: null,
@@ -45,6 +50,7 @@ router.get(
         OR: [
           { name: { contains: search, mode: "insensitive" as const } },
           { email: { contains: search, mode: "insensitive" as const } },
+          { phone: { contains: search, mode: "insensitive" as const } },
         ],
       }),
     };
@@ -68,10 +74,11 @@ router.get(
       prisma.user.count({ where }),
     ]);
 
-    sendSuccess(res, "Users fetched successfully", {
-      users,
-      meta: buildMeta(page, limit, total),
-    });
+    sendSuccess(
+      res,
+      "Users fetched successfully",
+      createPaginatedResponse(req, users, total, "users"),
+    );
   }),
 );
 
@@ -159,8 +166,9 @@ router.delete(
 // GET /api/v1/admin/audit-logs — View audit trail
 router.get(
   "/audit-logs",
+  validate(listAuditLogsSchema),
   asyncHandler(async (req, res) => {
-    const { page, limit, skip } = getPagination(req);
+    const { page, limit, skip, search } = getPagination(req);
     const { action, entityType } = req.query as {
       action?: string;
       entityType?: string;
@@ -169,6 +177,21 @@ router.get(
     const where = {
       ...(action && { action }),
       ...(entityType && { entityType }),
+      ...(search && {
+        OR: [
+          { action: { contains: search, mode: "insensitive" as const } },
+          { entityType: { contains: search, mode: "insensitive" as const } },
+          { entityId: { contains: search, mode: "insensitive" as const } },
+          {
+            actor: { name: { contains: search, mode: "insensitive" as const } },
+          },
+          {
+            actor: {
+              email: { contains: search, mode: "insensitive" as const },
+            },
+          },
+        ],
+      }),
     };
 
     const [logs, total] = await Promise.all([
@@ -184,10 +207,11 @@ router.get(
       prisma.auditLog.count({ where }),
     ]);
 
-    sendSuccess(res, "Audit logs fetched successfully", {
-      logs,
-      meta: buildMeta(page, limit, total),
-    });
+    sendSuccess(
+      res,
+      "Audit logs fetched successfully",
+      createPaginatedResponse(req, logs, total, "logs"),
+    );
   }),
 );
 

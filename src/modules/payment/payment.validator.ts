@@ -52,6 +52,8 @@ export const listPaymentsQuerySchema = z.object({
   query: z
     .object({
       status: z.enum(["PENDING", "SUCCESS", "FAILED", "REFUNDED"]).optional(),
+      search: z.string().optional(),
+      q: z.string().optional(),
       page: z
         .string()
         .regex(/^\d+$/, "Page must be a positive number")

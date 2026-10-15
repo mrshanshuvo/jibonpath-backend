@@ -18,3 +18,13 @@ export const updateDriverSchema = z.object({
 
 export type CreateDriverInput = z.infer<typeof createDriverSchema>["body"];
 export type UpdateDriverInput = z.infer<typeof updateDriverSchema>["body"];
+
+export const listDriversSchema = z.object({
+  query: z.object({
+    isAvailable: z.string().optional(),
+    search: z.string().optional(),
+    q: z.string().optional(),
+    page: z.string().optional(),
+    limit: z.string().optional(),
+  }),
+});

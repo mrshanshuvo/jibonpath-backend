@@ -60,6 +60,9 @@ describe("Pagination Utility", () => {
         limit: 10,
         total: 5,
         totalPages: 1,
+        hasNextPage: false,
+        hasPrevPage: false,
+        hasMore: false,
       });
     });
 
@@ -71,6 +74,9 @@ describe("Pagination Utility", () => {
         limit: 10,
         total: 25,
         totalPages: 3,
+        hasNextPage: true,
+        hasPrevPage: true,
+        hasMore: true,
       });
     });
   });
