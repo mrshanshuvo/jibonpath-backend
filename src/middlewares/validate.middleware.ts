@@ -19,9 +19,11 @@ export const validate =
         req.body = parsed.body;
       }
       if (parsed.params !== undefined) {
+        // biome-ignore lint/suspicious/noExplicitAny: Express req.params typing
         req.params = parsed.params as any;
       }
       if (parsed.query !== undefined) {
+        // biome-ignore lint/suspicious/noExplicitAny: Express req.query typing
         req.query = parsed.query as any;
       }
 

@@ -88,7 +88,8 @@ router.post(
   authorize("DRIVER", "ADMIN"),
   validate(recordLocationSchema),
   asyncHandler(async (req, res) => {
-    if (!req.user?.userId || !req.user?.role) throw new AppError("Unauthorized", 401);
+    if (!req.user?.userId || !req.user?.role)
+      throw new AppError("Unauthorized", 401);
     const tick = await dispatchService.recordLocation(
       req.params.id,
       req.body,
@@ -150,14 +151,17 @@ router.get(
     }
 
     // Subscribe to ongoing coordinate ticks
-    const unsubscribe = telemetryStore.subscribeTelemetry(dispatchId, (tick) => {
-      res.write(
-        `data: ${JSON.stringify({
-          type: "telemetry",
-          ...tick,
-        })}\n\n`,
-      );
-    });
+    const unsubscribe = telemetryStore.subscribeTelemetry(
+      dispatchId,
+      (tick) => {
+        res.write(
+          `data: ${JSON.stringify({
+            type: "telemetry",
+            ...tick,
+          })}\n\n`,
+        );
+      },
+    );
 
     // 15-second heartbeat ping to prevent proxy connection timeout
     const keepAliveTimer = setInterval(() => {
