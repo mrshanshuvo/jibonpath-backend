@@ -2,6 +2,7 @@ import type { Request } from "express";
 import { prisma } from "../../config/db";
 import { AppError } from "../../utils/AppError";
 import { createPaginatedResponse, getPagination } from "../../utils/pagination";
+import { calculateTripFare } from "../../utils/fareCalculator";
 import type {
   CreateDispatchInput,
   RecordLocationInput,
@@ -77,6 +78,16 @@ export const getDispatchById = async (id: string, requesterUserId?: string, requ
           status: true,
           callerId: true,
           description: true,
+          payment: {
+            select: {
+              id: true,
+              amount: true,
+              currency: true,
+              gateway: true,
+              status: true,
+              gatewayTxnId: true,
+            },
+          },
           caller: {
             select: {
               id: true,
@@ -135,6 +146,16 @@ export const getDispatchByRequestId = async (requestId: string, requesterUserId?
           status: true,
           callerId: true,
           description: true,
+          payment: {
+            select: {
+              id: true,
+              amount: true,
+              currency: true,
+              gateway: true,
+              status: true,
+              gatewayTxnId: true,
+            },
+          },
           caller: {
             select: {
               id: true,
@@ -244,6 +265,38 @@ export const updateDispatchStatus = async (
       },
     });
 
+    // If reaching hospital arrival or completion, ensure payment record exists with calculated fare
+    if (data.status === "HOSPITAL_ARRIVAL" || data.status === "COMPLETED") {
+      const existingPayment = await tx.payment.findUnique({
+        where: { requestId: dispatch.requestId },
+      });
+      if (!existingPayment) {
+        const fullDispatch = await tx.dispatch.findUnique({
+          where: { id },
+          include: { ambulance: true, hospital: true, request: true },
+        });
+        if (fullDispatch?.request) {
+          const fare = calculateTripFare({
+            ambulanceType: fullDispatch.ambulance?.type ?? "BASIC",
+            priority: fullDispatch.request.priority,
+            pickupLat: fullDispatch.request.pickupLat,
+            pickupLng: fullDispatch.request.pickupLng,
+            hospitalLat: fullDispatch.hospital?.lat,
+            hospitalLng: fullDispatch.hospital?.lng,
+          });
+          await tx.payment.create({
+            data: {
+              requestId: dispatch.requestId,
+              amount: fare.totalFare,
+              currency: "BDT",
+              gateway: "SSLCOMMERZ",
+              status: "PENDING",
+            },
+          });
+        }
+      }
+    }
+
     if (data.status === "COMPLETED") {
       await tx.ambulance.update({
         where: { id: dispatch.ambulanceId },
@@ -345,6 +398,16 @@ export const listDispatches = async (req: Request) => {
             pickupAddress: true,
             priority: true,
             status: true,
+            payment: {
+              select: {
+                id: true,
+                amount: true,
+                currency: true,
+                gateway: true,
+                status: true,
+                gatewayTxnId: true,
+              },
+            },
           },
         },
         hospital: {
@@ -394,6 +457,16 @@ export const getMyActiveDispatch = async (userId: string) => {
           priority: true,
           status: true,
           description: true,
+          payment: {
+            select: {
+              id: true,
+              amount: true,
+              currency: true,
+              gateway: true,
+              status: true,
+              gatewayTxnId: true,
+            },
+          },
           caller: {
             select: {
               id: true,

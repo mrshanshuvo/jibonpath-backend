@@ -310,6 +310,24 @@ export const getPaymentStatus = asyncHandler(
   },
 );
 
+// POST /api/v1/payments/cash-confirm
+export const confirmCashPayment = asyncHandler(
+  async (req: Request, res: Response) => {
+    if (!req.user?.userId || !req.user?.role)
+      throw new AppError("Unauthorized", 401);
+    const { requestId } = req.body;
+    if (!requestId) {
+      throw new AppError("requestId is required", 400);
+    }
+    const payment = await paymentService.confirmCashPayment(
+      requestId,
+      req.user.userId,
+      req.user.role,
+    );
+    sendSuccess(res, "Cash payment confirmed successfully at bay", payment);
+  },
+);
+
 // POST /api/v1/payments/stripe/webhook
 export const stripeWebhook = asyncHandler(
   async (req: Request, res: Response) => {

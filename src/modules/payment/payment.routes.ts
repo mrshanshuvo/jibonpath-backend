@@ -72,11 +72,19 @@ router.all("/sslcommerz/cancel", paymentController.sslcommerzCancel);
 // POST /api/v1/payments/sslcommerz/ipn — SSLCommerz IPN webhook
 router.post("/sslcommerz/ipn", paymentController.sslcommerzIPN);
 
-// GET /api/v1/payments/fare/:requestId — Patient or Admin views calculated fare estimate
+// POST /api/v1/payments/cash-confirm — Driver or Admin confirms cash settlement at hospital bay
+router.post(
+  "/cash-confirm",
+  authenticate,
+  authorize("DRIVER", "ADMIN"),
+  paymentController.confirmCashPayment,
+);
+
+// GET /api/v1/payments/fare/:requestId — Patient, Driver, or Admin views calculated fare estimate
 router.get(
   "/fare/:requestId",
   authenticate,
-  authorize("PATIENT", "ADMIN"),
+  authorize("PATIENT", "ADMIN", "DRIVER"),
   validate(getFareSchema),
   paymentController.getFareEstimate,
 );
@@ -90,11 +98,11 @@ router.get(
   paymentController.getMyPayments,
 );
 
-// GET /api/v1/payments/:requestId — Patient or Admin views payment status
+// GET /api/v1/payments/:requestId — Patient, Driver, or Admin views payment status
 router.get(
   "/:requestId",
   authenticate,
-  authorize("PATIENT", "ADMIN"),
+  authorize("PATIENT", "ADMIN", "DRIVER"),
   paymentController.getPaymentStatus,
 );
 

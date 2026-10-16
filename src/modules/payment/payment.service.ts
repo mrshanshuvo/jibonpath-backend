@@ -28,13 +28,16 @@ export const getCalculatedFareForRequest = async (
     where: {
       id: requestId,
       deletedAt: null,
-      ...(userRole !== "ADMIN" && callerId ? { callerId } : {}),
+      ...(userRole !== "ADMIN" && userRole !== "DRIVER" && callerId
+        ? { callerId }
+        : {}),
     },
     include: {
       dispatch: {
         include: {
           ambulance: true,
           hospital: true,
+          driver: true,
         },
       },
     },
@@ -42,6 +45,15 @@ export const getCalculatedFareForRequest = async (
 
   if (!request) {
     throw new AppError("Emergency request not found", 404);
+  }
+
+  if (userRole === "DRIVER" && callerId) {
+    const driver = await prisma.driver.findFirst({
+      where: { userId: callerId, deletedAt: null },
+    });
+    if (!driver || request.dispatch?.driverId !== driver.id) {
+      throw new AppError("Forbidden: Access denied to this trip fare", 403);
+    }
   }
 
   const ambulanceType = request.dispatch?.ambulance?.type ?? "BASIC";
@@ -506,8 +518,21 @@ export const getPaymentByRequestId = async (
   });
   if (!request) throw new AppError("Emergency request not found", 404);
 
-  if (role !== "ADMIN" && request.callerId !== callerId) {
-    throw new AppError("Access denied", 403);
+  if (role !== "ADMIN") {
+    if (role === "DRIVER") {
+      const dispatch = await prisma.dispatch.findUnique({
+        where: { requestId: effectiveRequestId },
+        include: { driver: true },
+      });
+      const driver = await prisma.driver.findFirst({
+        where: { userId: callerId, deletedAt: null },
+      });
+      if (!driver || dispatch?.driverId !== driver.id) {
+        throw new AppError("Access denied", 403);
+      }
+    } else if (request.callerId !== callerId) {
+      throw new AppError("Access denied", 403);
+    }
   }
 
   if (!payment) {
@@ -517,6 +542,90 @@ export const getPaymentByRequestId = async (
   }
 
   if (!payment) throw new AppError("No payment found for this request", 404);
+
+  return payment;
+};
+
+// ─── Confirm Cash Payment at Bay ──────────────────────────────────────────────
+
+export const confirmCashPayment = async (
+  requestId: string,
+  actorUserId: string,
+  actorRole: string,
+) => {
+  const request = await prisma.emergencyRequest.findUnique({
+    where: { id: requestId },
+    include: {
+      dispatch: {
+        include: {
+          driver: true,
+          ambulance: true,
+          hospital: true,
+        },
+      },
+      payment: true,
+    },
+  });
+
+  if (!request) {
+    throw new AppError("Emergency request not found", 404);
+  }
+
+  // Ensure actor is admin or assigned driver
+  if (actorRole === "DRIVER") {
+    const driver = await prisma.driver.findFirst({
+      where: { userId: actorUserId, deletedAt: null },
+    });
+    if (!driver || request.dispatch?.driverId !== driver.id) {
+      throw new AppError(
+        "Forbidden: You are not the assigned driver for this trip",
+        403,
+      );
+    }
+  } else if (actorRole !== "ADMIN") {
+    throw new AppError("Forbidden: Unauthorized to confirm cash payment", 403);
+  }
+
+  let amount = request.payment?.amount;
+  if (!amount) {
+    const fare = calculateTripFare({
+      ambulanceType: request.dispatch?.ambulance?.type ?? "BASIC",
+      priority: request.priority,
+      pickupLat: request.pickupLat,
+      pickupLng: request.pickupLng,
+      hospitalLat: request.dispatch?.hospital?.lat,
+      hospitalLng: request.dispatch?.hospital?.lng,
+    });
+    amount = fare.totalFare;
+  }
+
+  const payment = await prisma.payment.upsert({
+    where: { requestId },
+    update: {
+      status: "SUCCESS",
+      gatewayTxnId: `CASH-${Date.now()}-${requestId.slice(0, 8)}`,
+      amount,
+    },
+    create: {
+      requestId,
+      amount,
+      currency: "BDT",
+      gateway: "SSLCOMMERZ",
+      gatewayTxnId: `CASH-${Date.now()}-${requestId.slice(0, 8)}`,
+      status: "SUCCESS",
+    },
+  });
+
+  if (request.dispatch?.id) {
+    await prisma.tripStatusLog.create({
+      data: {
+        dispatchId: request.dispatch.id,
+        status: request.dispatch.status,
+        note: `Payment settled in CASH (৳ ${amount}) at hospital emergency bay`,
+        updatedByUserId: actorUserId,
+      },
+    });
+  }
 
   return payment;
 };
