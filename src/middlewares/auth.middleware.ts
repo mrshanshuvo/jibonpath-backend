@@ -18,12 +18,17 @@ export const authenticate = (
   next: NextFunction,
 ) => {
   const authHeader = req.headers.authorization;
+  let token: string | undefined;
 
-  if (!authHeader?.startsWith("Bearer ")) {
-    return next(new AppError("Access token missing or malformed", 401));
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1];
+  } else if (req.query?.token && typeof req.query.token === "string") {
+    token = req.query.token;
   }
 
-  const token = authHeader.split(" ")[1];
+  if (!token) {
+    return next(new AppError("Access token missing or malformed", 401));
+  }
   try {
     const payload = verifyAccessToken(token);
     req.user = payload;

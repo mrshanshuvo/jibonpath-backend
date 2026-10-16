@@ -51,6 +51,19 @@ export const listDispatchesQuerySchema = z.object({
     .optional(),
 });
 
+export const recordLocationSchema = z.object({
+  params: z.object({
+    id: z.string().uuid("Invalid dispatch ID"),
+  }),
+  body: z.object({
+    lat: z.number().min(-90).max(90),
+    lng: z.number().min(-180).max(180),
+    heading: z.number().min(0).max(360).optional(),
+    speedKmh: z.number().min(0).max(250).optional(),
+    stage: z.string().optional(),
+  }),
+});
+
 export type CreateDispatchInput = z.infer<typeof createDispatchSchema>["body"];
 export type UpdateDispatchStatusInput = z.infer<
   typeof updateDispatchStatusSchema
@@ -58,3 +71,4 @@ export type UpdateDispatchStatusInput = z.infer<
 export type ListDispatchesQueryInput = z.infer<
   typeof listDispatchesQuerySchema
 >["query"];
+export type RecordLocationInput = z.infer<typeof recordLocationSchema>["body"];

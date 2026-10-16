@@ -195,4 +195,50 @@ describe("Dispatch Module Integration Tests", () => {
       expect(res.status).toBe(401);
     });
   });
+
+  describe("Live Telemetry & Tracking Integration", () => {
+    it("Driver broadcasts real-time GPS coordinate tick", async () => {
+      const res = await request(app)
+        .post(`/api/v1/dispatches/${dispatchId}/location`)
+        .set("Authorization", `Bearer ${driverToken}`)
+        .send({
+          lat: 23.8103,
+          lng: 90.4125,
+          heading: 45,
+          speedKmh: 42,
+          stage: "EN_ROUTE",
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.lat).toBe(23.8103);
+      expect(res.body.data.lng).toBe(90.4125);
+      expect(res.body.data.speedKmh).toBe(42);
+      expect(res.body.data.heading).toBe(45);
+    });
+
+    it("Patient can fetch latest telemetry coordinate", async () => {
+      const res = await request(app)
+        .get(`/api/v1/dispatches/${dispatchId}/telemetry/latest`)
+        .set("Authorization", `Bearer ${patientToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toBeDefined();
+      expect(res.body.data.lat).toBe(23.8103);
+      expect(res.body.data.lng).toBe(90.4125);
+    });
+
+    it("Patient can look up dispatch details with latest telemetry attached", async () => {
+      const res = await request(app)
+        .get(`/api/v1/dispatches/${dispatchId}`)
+        .set("Authorization", `Bearer ${patientToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.id).toBe(dispatchId);
+      expect(res.body.data.latestTelemetry).toBeDefined();
+      expect(res.body.data.latestTelemetry.lat).toBe(23.8103);
+    });
+  });
 });

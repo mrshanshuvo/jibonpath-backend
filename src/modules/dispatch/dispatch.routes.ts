@@ -10,8 +10,10 @@ import * as dispatchService from "./dispatch.service";
 import {
   createDispatchSchema,
   listDispatchesQuerySchema,
+  recordLocationSchema,
   updateDispatchStatusSchema,
 } from "./dispatch.validator";
+import { telemetryStore } from "./telemetry.store";
 
 const router = Router();
 
@@ -64,13 +66,123 @@ router.get(
   }),
 );
 
-// GET /api/v1/dispatches/:id — ADMIN or DRIVER
+// GET /api/v1/dispatches/by-request/:requestId — PATIENT, DRIVER, or ADMIN gets dispatch for a request
+router.get(
+  "/by-request/:requestId",
+  authenticate,
+  authorize("PATIENT", "DRIVER", "ADMIN"),
+  asyncHandler(async (req, res) => {
+    const dispatch = await dispatchService.getDispatchByRequestId(
+      req.params.requestId,
+      req.user?.userId,
+      req.user?.role,
+    );
+    sendSuccess(res, "Dispatch details fetched successfully", dispatch);
+  }),
+);
+
+// POST /api/v1/dispatches/:id/location — DRIVER or ADMIN broadcasts coordinates
+router.post(
+  "/:id/location",
+  authenticate,
+  authorize("DRIVER", "ADMIN"),
+  validate(recordLocationSchema),
+  asyncHandler(async (req, res) => {
+    if (!req.user?.userId || !req.user?.role) throw new AppError("Unauthorized", 401);
+    const tick = await dispatchService.recordLocation(
+      req.params.id,
+      req.body,
+      req.user.userId,
+      req.user.role,
+    );
+    sendSuccess(res, "Location broadcast successfully", tick);
+  }),
+);
+
+// GET /api/v1/dispatches/:id/telemetry/latest — Fallback coordinate polling
+router.get(
+  "/:id/telemetry/latest",
+  authenticate,
+  authorize("PATIENT", "DRIVER", "ADMIN"),
+  asyncHandler(async (req, res) => {
+    const tick = await dispatchService.getLatestLocation(req.params.id);
+    sendSuccess(res, "Latest telemetry fetched successfully", tick);
+  }),
+);
+
+// GET /api/v1/dispatches/:id/telemetry/stream — SSE coordinate stream
+router.get(
+  "/:id/telemetry/stream",
+  authenticate,
+  authorize("PATIENT", "DRIVER", "ADMIN"),
+  asyncHandler(async (req, res) => {
+    const dispatchId = req.params.id;
+    // Verify dispatch exists & user has permissions
+    const dispatch = await dispatchService.getDispatchById(
+      dispatchId,
+      req.user?.userId,
+      req.user?.role,
+    );
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+
+    // Initial connection ack
+    res.write(
+      `data: ${JSON.stringify({
+        type: "connected",
+        dispatchId,
+        status: dispatch.status,
+      })}\n\n`,
+    );
+
+    // If there is existing cached telemetry, send immediately
+    if (dispatch.latestTelemetry) {
+      res.write(
+        `data: ${JSON.stringify({
+          type: "telemetry",
+          ...dispatch.latestTelemetry,
+        })}\n\n`,
+      );
+    }
+
+    // Subscribe to ongoing coordinate ticks
+    const unsubscribe = telemetryStore.subscribeTelemetry(dispatchId, (tick) => {
+      res.write(
+        `data: ${JSON.stringify({
+          type: "telemetry",
+          ...tick,
+        })}\n\n`,
+      );
+    });
+
+    // 15-second heartbeat ping to prevent proxy connection timeout
+    const keepAliveTimer = setInterval(() => {
+      res.write(": keep-alive\n\n");
+    }, 15000);
+
+    req.on("close", () => {
+      clearInterval(keepAliveTimer);
+      unsubscribe();
+      res.end();
+    });
+  }),
+);
+
+// GET /api/v1/dispatches/:id — ADMIN, DRIVER, or PATIENT
 router.get(
   "/:id",
   authenticate,
-  authorize("ADMIN", "DRIVER"),
+  authorize("ADMIN", "DRIVER", "PATIENT"),
   asyncHandler(async (req, res) => {
-    const dispatch = await dispatchService.getDispatchById(req.params.id);
+    const dispatch = await dispatchService.getDispatchById(
+      req.params.id,
+      req.user?.userId,
+      req.user?.role,
+    );
     sendSuccess(res, "Dispatch details fetched successfully", dispatch);
   }),
 );

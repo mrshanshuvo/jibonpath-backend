@@ -4,8 +4,10 @@ import { AppError } from "../../utils/AppError";
 import { createPaginatedResponse, getPagination } from "../../utils/pagination";
 import type {
   CreateDispatchInput,
+  RecordLocationInput,
   UpdateDispatchStatusInput,
 } from "./dispatch.validator";
+import { telemetryStore, type TelemetryTick } from "./telemetry.store";
 
 export const createDispatch = async (data: CreateDispatchInput) => {
   return prisma.$transaction(async (tx) => {
@@ -61,21 +63,155 @@ export const createDispatch = async (data: CreateDispatchInput) => {
   });
 };
 
-export const getDispatchById = async (id: string) => {
+export const getDispatchById = async (id: string, requesterUserId?: string, requesterRole?: string) => {
   const dispatch = await prisma.dispatch.findUnique({
     where: { id },
     include: {
       request: {
-        select: { pickupAddress: true, priority: true, status: true },
+        select: {
+          id: true,
+          pickupAddress: true,
+          pickupLat: true,
+          pickupLng: true,
+          priority: true,
+          status: true,
+          callerId: true,
+          description: true,
+          caller: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+            },
+          },
+        },
       },
-      ambulance: { select: { vehicleNumber: true, type: true } },
-      driver: { include: { user: { select: { name: true, phone: true } } } },
+      ambulance: {
+        select: {
+          id: true,
+          vehicleNumber: true,
+          type: true,
+          status: true,
+        },
+      },
+      driver: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      },
       hospital: true,
       tripStatusLogs: { orderBy: { createdAt: "desc" } },
     },
   });
   if (!dispatch) throw new AppError("Dispatch not found", 404);
-  return dispatch;
+
+  // If requester is a PATIENT, ensure they own the request
+  if (requesterRole === "PATIENT" && requesterUserId && dispatch.request.callerId !== requesterUserId) {
+    throw new AppError("Forbidden: You do not have permission to view this dispatch", 403);
+  }
+
+  const latestTelemetry = await telemetryStore.getLatestTelemetry(id);
+  return { ...dispatch, latestTelemetry };
+};
+
+export const getDispatchByRequestId = async (requestId: string, requesterUserId?: string, requesterRole?: string) => {
+  const dispatch = await prisma.dispatch.findUnique({
+    where: { requestId },
+    include: {
+      request: {
+        select: {
+          id: true,
+          pickupAddress: true,
+          pickupLat: true,
+          pickupLng: true,
+          priority: true,
+          status: true,
+          callerId: true,
+          description: true,
+          caller: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+            },
+          },
+        },
+      },
+      ambulance: {
+        select: {
+          id: true,
+          vehicleNumber: true,
+          type: true,
+          status: true,
+        },
+      },
+      driver: {
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              phone: true,
+            },
+          },
+        },
+      },
+      hospital: true,
+      tripStatusLogs: { orderBy: { createdAt: "desc" } },
+    },
+  });
+
+  if (!dispatch) throw new AppError("Dispatch for this request was not found", 404);
+
+  if (requesterRole === "PATIENT" && requesterUserId && dispatch.request.callerId !== requesterUserId) {
+    throw new AppError("Forbidden: You do not have permission to view this dispatch", 403);
+  }
+
+  const latestTelemetry = await telemetryStore.getLatestTelemetry(dispatch.id);
+  return { ...dispatch, latestTelemetry };
+};
+
+export const recordLocation = async (
+  dispatchId: string,
+  data: RecordLocationInput,
+  actorUserId: string,
+  actorRole: string,
+): Promise<TelemetryTick> => {
+  const dispatch = await prisma.dispatch.findUnique({
+    where: { id: dispatchId },
+    include: { driver: true },
+  });
+
+  if (!dispatch) throw new AppError("Dispatch not found", 404);
+
+  if (actorRole === "DRIVER" && dispatch.driver.userId !== actorUserId) {
+    throw new AppError("Forbidden: You are not the driver assigned to this dispatch", 403);
+  }
+
+  const tick: TelemetryTick = {
+    dispatchId,
+    lat: data.lat,
+    lng: data.lng,
+    heading: data.heading,
+    speedKmh: data.speedKmh,
+    stage: data.stage || dispatch.status,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await telemetryStore.setTelemetry(tick);
+  return tick;
+};
+
+export const getLatestLocation = async (dispatchId: string) => {
+  return telemetryStore.getLatestTelemetry(dispatchId);
 };
 
 export const updateDispatchStatus = async (
@@ -121,6 +257,19 @@ export const updateDispatchStatus = async (
         where: { id: dispatch.requestId },
         data: { status: "COMPLETED" },
       });
+
+      // Clear cached telemetry on mission completion
+      telemetryStore.clear(id);
+    } else {
+      // Update stage in latest cached telemetry if available
+      const existing = await telemetryStore.getLatestTelemetry(id);
+      if (existing) {
+        await telemetryStore.setTelemetry({
+          ...existing,
+          stage: data.status,
+          updatedAt: new Date().toISOString(),
+        });
+      }
     }
 
     return updated;
