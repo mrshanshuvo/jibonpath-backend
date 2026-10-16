@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { prisma } from "../../config/db";
 import { envConfig } from "../../config/env";
 import { AppError } from "../../utils/AppError";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -63,6 +64,90 @@ export const executeBkash = asyncHandler(
   },
 );
 
+// ALL /api/v1/payments/bkash/callback (bKash browser redirect callback)
+export const bkashCallback = asyncHandler(
+  async (req: Request, res: Response) => {
+    const paymentID = (req.query.paymentID || req.body?.paymentID) as string;
+    const status = (
+      (req.query.status || req.body?.status || "") as string
+    ).toLowerCase();
+
+    const clientBaseUrl = envConfig.clientUrl.replace(/\/+$/, "");
+
+    if (!paymentID) {
+      if (
+        req.headers.accept?.includes("application/json") &&
+        !req.headers.accept?.includes("text/html")
+      ) {
+        throw new AppError("Missing paymentID in callback", 400);
+      }
+      return res.redirect(
+        `${clientBaseUrl}/payment/cancel?gateway=BKASH&status=missing_payment_id`,
+      );
+    }
+
+    try {
+      if (status === "success") {
+        const result = await paymentService.processBkashCallback(
+          paymentID,
+          "success",
+        );
+
+        if (
+          req.headers.accept?.includes("application/json") &&
+          !req.headers.accept?.includes("text/html")
+        ) {
+          return sendSuccess(
+            res,
+            "bKash payment executed successfully",
+            result,
+          );
+        }
+
+        return res.redirect(
+          `${clientBaseUrl}/payment/success?paymentID=${encodeURIComponent(paymentID)}&gateway=BKASH&trxID=${encodeURIComponent(result.trxID || "")}&requestId=${encodeURIComponent(result.requestId || "")}`,
+        );
+      }
+
+      const result = await paymentService.processBkashCallback(
+        paymentID,
+        status || "failure",
+      );
+
+      if (
+        req.headers.accept?.includes("application/json") &&
+        !req.headers.accept?.includes("text/html")
+      ) {
+        return sendSuccess(
+          res,
+          "bKash payment failed or cancelled",
+          result,
+          400,
+        );
+      }
+
+      return res.redirect(
+        `${clientBaseUrl}/payment/cancel?gateway=BKASH&status=${encodeURIComponent(status || "failure")}&paymentID=${encodeURIComponent(paymentID)}&requestId=${encodeURIComponent(result.requestId || "")}`,
+      );
+    } catch (error: unknown) {
+      if (
+        req.headers.accept?.includes("application/json") &&
+        !req.headers.accept?.includes("text/html")
+      ) {
+        throw error;
+      }
+      const errMessage =
+        error instanceof Error ? error.message : "Payment execution failed";
+      const payment = await prisma.payment.findFirst({
+        where: { sessionId: paymentID },
+      });
+      return res.redirect(
+        `${clientBaseUrl}/payment/cancel?gateway=BKASH&status=failure&paymentID=${encodeURIComponent(paymentID)}&requestId=${encodeURIComponent(payment?.requestId || "")}&error=${encodeURIComponent(errMessage)}`,
+      );
+    }
+  },
+);
+
 // POST /api/v1/payments/sslcommerz/initiate
 export const initSSLCommerz = asyncHandler(
   async (req: Request, res: Response) => {
@@ -102,6 +187,18 @@ export const sslcommerzSuccess = asyncHandler(
       requestId,
       val_id,
     );
+
+    const isBrowser =
+      Boolean(req.headers.accept?.includes("text/html")) ||
+      Boolean(req.is("application/x-www-form-urlencoded"));
+
+    if (isBrowser) {
+      const clientBaseUrl = envConfig.clientUrl.replace(/\/+$/, "");
+      return res.redirect(
+        `${clientBaseUrl}/payment/success?requestId=${encodeURIComponent(requestId)}&gateway=SSLCOMMERZ&tran_id=${encodeURIComponent(result.tranId)}`,
+      );
+    }
+
     sendSuccess(res, "SSLCommerz payment validated and completed", result);
   },
 );
@@ -109,7 +206,19 @@ export const sslcommerzSuccess = asyncHandler(
 // POST /api/v1/payments/sslcommerz/fail
 export const sslcommerzFail = asyncHandler(
   async (req: Request, res: Response) => {
-    const requestId = req.query.requestId as string;
+    const requestId =
+      (req.query.requestId as string) || (req.body?.value_a as string) || "";
+    const isBrowser =
+      Boolean(req.headers.accept?.includes("text/html")) ||
+      Boolean(req.is("application/x-www-form-urlencoded"));
+
+    if (isBrowser) {
+      const clientBaseUrl = envConfig.clientUrl.replace(/\/+$/, "");
+      return res.redirect(
+        `${clientBaseUrl}/payment/cancel?gateway=SSLCOMMERZ&status=failure&requestId=${encodeURIComponent(requestId)}`,
+      );
+    }
+
     sendSuccess(
       res,
       "SSLCommerz payment failed",
@@ -122,7 +231,19 @@ export const sslcommerzFail = asyncHandler(
 // POST /api/v1/payments/sslcommerz/cancel
 export const sslcommerzCancel = asyncHandler(
   async (req: Request, res: Response) => {
-    const requestId = req.query.requestId as string;
+    const requestId =
+      (req.query.requestId as string) || (req.body?.value_a as string) || "";
+    const isBrowser =
+      Boolean(req.headers.accept?.includes("text/html")) ||
+      Boolean(req.is("application/x-www-form-urlencoded"));
+
+    if (isBrowser) {
+      const clientBaseUrl = envConfig.clientUrl.replace(/\/+$/, "");
+      return res.redirect(
+        `${clientBaseUrl}/payment/cancel?gateway=SSLCOMMERZ&status=cancelled&requestId=${encodeURIComponent(requestId)}`,
+      );
+    }
+
     sendSuccess(
       res,
       "SSLCommerz payment was cancelled by user",
@@ -171,10 +292,7 @@ export const getMyPayments = asyncHandler(
       req.user.role,
       req,
     );
-    sendSuccess(res, "Payment history fetched successfully", {
-      payments: result.payments,
-      meta: result.meta,
-    });
+    sendSuccess(res, "Payment history fetched successfully", result);
   },
 );
 

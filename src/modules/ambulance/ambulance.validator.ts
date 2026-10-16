@@ -31,6 +31,8 @@ export const listAmbulanceSchema = z.object({
     type: z
       .enum(["BASIC", "ADVANCED_LIFE_SUPPORT", "INTENSIVE_CARE"])
       .optional(),
+    search: z.string().optional(),
+    q: z.string().optional(),
     page: z.string().optional(),
     limit: z.string().optional(),
   }),

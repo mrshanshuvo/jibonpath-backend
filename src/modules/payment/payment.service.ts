@@ -8,7 +8,7 @@ import {
   type FareBreakdown,
   calculateTripFare,
 } from "../../utils/fareCalculator";
-import { buildMeta, getPagination } from "../../utils/pagination";
+import { createPaginatedResponse, getPagination } from "../../utils/pagination";
 import * as sslcommerzHelper from "../../utils/sslcommerz";
 import type {
   CreateBkashCheckoutInput,
@@ -295,6 +295,73 @@ export const executeBkashPayment = async (
   };
 };
 
+// ─── Process bKash Browser Callback ───────────────────────────────────────────
+
+export const processBkashCallback = async (
+  paymentID: string,
+  status: string,
+) => {
+  const payment = await prisma.payment.findFirst({
+    where: { sessionId: paymentID },
+  });
+
+  const normalizedStatus = (status || "").toLowerCase();
+
+  if (normalizedStatus === "success") {
+    if (payment?.status === "SUCCESS") {
+      return {
+        success: true,
+        requestId: payment.requestId,
+        paymentID,
+        trxID: payment.gatewayTxnId || "",
+      };
+    }
+
+    const execRes = await bkashHelper.executeBkashPayment(paymentID);
+
+    if (payment) {
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: "SUCCESS",
+          gatewayTxnId: execRes.trxID,
+        },
+      });
+
+      await prisma.emergencyRequest.updateMany({
+        where: {
+          id: payment.requestId,
+          status: { in: ["DISPATCHED", "PENDING"] },
+        },
+        data: { status: "COMPLETED" },
+      });
+    }
+
+    return {
+      success: true,
+      requestId: payment?.requestId,
+      paymentID,
+      trxID: execRes.trxID,
+    };
+  }
+
+  if (payment && payment.status === "PENDING") {
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: "FAILED",
+      },
+    });
+  }
+
+  return {
+    success: false,
+    requestId: payment?.requestId,
+    paymentID,
+    status: normalizedStatus || "failure",
+  };
+};
+
 // ─── Initialize SSLCommerz Payment ───────────────────────────────────────────
 
 export const initSSLCommerzPayment = async (
@@ -375,6 +442,8 @@ export const initSSLCommerzPayment = async (
   return {
     gatewayUrl: sslRes.GatewayPageURL,
     gatewayPageURL: sslRes.GatewayPageURL,
+    GatewayPageURL: sslRes.GatewayPageURL,
+    url: sslRes.GatewayPageURL,
     sessionKey: sslRes.sessionkey,
     sessionkey: sslRes.sessionkey,
     amount: finalAmount,
@@ -415,12 +484,25 @@ export const finalizeSSLCommerzPayment = async (
 // ─── Get Payment Status for a Request ────────────────────────────────────────
 
 export const getPaymentByRequestId = async (
-  requestId: string,
+  identifier: string,
   callerId: string,
   role: string,
 ) => {
+  // 1. Check if identifier is a payment ID, session ID, or requestId
+  let payment = await prisma.payment.findFirst({
+    where: {
+      OR: [
+        { id: identifier },
+        { requestId: identifier },
+        { sessionId: identifier },
+      ],
+    },
+  });
+
+  const effectiveRequestId = payment?.requestId || identifier;
+
   const request = await prisma.emergencyRequest.findFirst({
-    where: { id: requestId, deletedAt: null },
+    where: { id: effectiveRequestId, deletedAt: null },
   });
   if (!request) throw new AppError("Emergency request not found", 404);
 
@@ -428,9 +510,12 @@ export const getPaymentByRequestId = async (
     throw new AppError("Access denied", 403);
   }
 
-  const payment = await prisma.payment.findUnique({
-    where: { requestId },
-  });
+  if (!payment) {
+    payment = await prisma.payment.findUnique({
+      where: { requestId: effectiveRequestId },
+    });
+  }
+
   if (!payment) throw new AppError("No payment found for this request", 404);
 
   return payment;
@@ -525,10 +610,10 @@ export const getMyPayments = async (
   userRole: string,
   req: Request,
 ) => {
-  const { page, limit, skip } = getPagination(req);
+  const { limit, skip, search } = getPagination(req);
   const { status } = req.query as { status?: string };
 
-  const where = {
+  const where: Record<string, unknown> = {
     ...(userRole !== "ADMIN" && {
       request: {
         callerId: userId,
@@ -537,6 +622,29 @@ export const getMyPayments = async (
     }),
     ...(status && { status: status as never }),
   };
+
+  if (search) {
+    where.OR = [
+      { gatewayTxnId: { contains: search, mode: "insensitive" } },
+      { sessionId: { contains: search, mode: "insensitive" } },
+      { request: { pickupAddress: { contains: search, mode: "insensitive" } } },
+      {
+        request: {
+          caller: { name: { contains: search, mode: "insensitive" } },
+        },
+      },
+      {
+        request: {
+          caller: { email: { contains: search, mode: "insensitive" } },
+        },
+      },
+      {
+        request: {
+          caller: { phone: { contains: search, mode: "insensitive" } },
+        },
+      },
+    ];
+  }
 
   const [total, payments] = await Promise.all([
     prisma.payment.count({ where }),
@@ -567,8 +675,5 @@ export const getMyPayments = async (
     }),
   ]);
 
-  return {
-    payments,
-    meta: buildMeta(page, limit, total),
-  };
+  return createPaginatedResponse(req, payments, total, "payments");
 };

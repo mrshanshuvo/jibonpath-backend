@@ -42,10 +42,7 @@ router.get(
   validate(listDispatchesQuerySchema),
   asyncHandler(async (req, res) => {
     const result = await dispatchService.listDispatches(req);
-    sendSuccess(res, "Dispatches fetched successfully", {
-      dispatches: result.dispatches,
-      meta: result.meta,
-    });
+    sendSuccess(res, "Dispatches fetched successfully", result);
   }),
 );
 

@@ -1,7 +1,7 @@
 import type { Request } from "express";
 import { prisma } from "../../config/db";
 import { AppError } from "../../utils/AppError";
-import { buildMeta, getPagination } from "../../utils/pagination";
+import { createPaginatedResponse, getPagination } from "../../utils/pagination";
 import type { CreateRequestInput } from "./request.validator";
 
 export const createRequest = async (
@@ -15,52 +15,69 @@ export const createRequest = async (
     throw new AppError("You already have an active pending request", 409);
   }
 
-  // Format destination and callback notes into description if provided
-  const noteParts: string[] = [];
-  if (data.hospitalName && data.hospitalName !== "Closest Available Emergency Room") {
-    noteParts.push(`[Hospital: ${data.hospitalName}]`);
-  }
-  if (data.contactPhone) {
-    noteParts.push(`[Callback: ${data.contactPhone}]`);
-  }
-  if (data.description?.trim()) {
-    noteParts.push(data.description.trim());
-  }
+  const {
+    priority,
+    pickupAddress,
+    pickupLat,
+    pickupLng,
+    description,
+    contactPhone,
+    hospitalName,
+  } = data;
 
-  const finalDescription = noteParts.length > 0 ? noteParts.join(" ") : null;
-
-  // Persist callback phone to user profile if not previously set
-  if (data.contactPhone) {
-    await prisma.user.updateMany({
-      where: { id: callerId, phone: null },
-      data: { phone: data.contactPhone },
-    });
-  }
+  // Format notes with callback phone and hospital destination cleanly
+  const notes = [
+    description?.trim(),
+    contactPhone?.trim() ? `Callback Phone: ${contactPhone.trim()}` : null,
+    hospitalName?.trim() ? `Destination: ${hospitalName.trim()}` : null,
+  ]
+    .filter(Boolean)
+    .join(" | ");
 
   return prisma.emergencyRequest.create({
     data: {
       callerId,
-      priority: data.priority,
-      pickupAddress: data.pickupAddress,
-      pickupLat: data.pickupLat,
-      pickupLng: data.pickupLng,
-      description: finalDescription,
+      priority,
+      pickupAddress,
+      pickupLat,
+      pickupLng,
+      description: notes || null,
+    },
+    include: {
+      caller: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+        },
+      },
     },
   });
 };
 
 export const listRequests = async (req: Request) => {
-  const { page, limit, skip } = getPagination(req);
+  const { limit, skip, search } = getPagination(req);
   const { status, priority } = req.query as {
     status?: string;
     priority?: string;
   };
 
-  const where = {
+  const where: Record<string, unknown> = {
     deletedAt: null,
     ...(status && { status: status as never }),
     ...(priority && { priority: priority as never }),
   };
+
+  if (search) {
+    where.OR = [
+      { pickupAddress: { contains: search, mode: "insensitive" } },
+      { description: { contains: search, mode: "insensitive" } },
+      { caller: { name: { contains: search, mode: "insensitive" } } },
+      { caller: { email: { contains: search, mode: "insensitive" } } },
+      { caller: { phone: { contains: search, mode: "insensitive" } } },
+    ];
+  }
 
   const [requests, total] = await Promise.all([
     prisma.emergencyRequest.findMany({
@@ -81,7 +98,7 @@ export const listRequests = async (req: Request) => {
     prisma.emergencyRequest.count({ where }),
   ]);
 
-  return { requests, meta: buildMeta(page, limit, total) };
+  return createPaginatedResponse(req, requests, total, "requests");
 };
 
 export const getRequestById = async (id: string) => {
@@ -106,11 +123,25 @@ export const getRequestById = async (id: string) => {
 };
 
 export const getMyRequests = async (callerId: string, req: Request) => {
-  const { page, limit, skip } = getPagination(req);
+  const { limit, skip, search } = getPagination(req);
+  const { status } = req.query as { status?: string };
+
+  const where: Record<string, unknown> = {
+    callerId,
+    deletedAt: null,
+    ...(status && { status: status as never }),
+  };
+
+  if (search) {
+    where.OR = [
+      { pickupAddress: { contains: search, mode: "insensitive" } },
+      { description: { contains: search, mode: "insensitive" } },
+    ];
+  }
 
   const [requests, total] = await Promise.all([
     prisma.emergencyRequest.findMany({
-      where: { callerId, deletedAt: null },
+      where,
       skip,
       take: limit,
       orderBy: { createdAt: "desc" },
@@ -119,10 +150,10 @@ export const getMyRequests = async (callerId: string, req: Request) => {
         payment: { select: { status: true, amount: true } },
       },
     }),
-    prisma.emergencyRequest.count({ where: { callerId, deletedAt: null } }),
+    prisma.emergencyRequest.count({ where }),
   ]);
 
-  return { requests, meta: buildMeta(page, limit, total) };
+  return createPaginatedResponse(req, requests, total, "requests");
 };
 
 export const cancelRequest = async (

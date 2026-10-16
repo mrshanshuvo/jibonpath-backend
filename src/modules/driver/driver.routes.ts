@@ -7,7 +7,11 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { logAudit } from "../../utils/auditLogger";
 import { sendSuccess } from "../../utils/response";
 import * as driverService from "./driver.service";
-import { createDriverSchema, updateDriverSchema } from "./driver.validator";
+import {
+  createDriverSchema,
+  listDriversSchema,
+  updateDriverSchema,
+} from "./driver.validator";
 
 const router = Router();
 
@@ -28,6 +32,7 @@ router.get(
   "/",
   authenticate,
   authorize("ADMIN"),
+  validate(listDriversSchema),
   asyncHandler(async (req, res) => {
     const result = await driverService.listDrivers(req);
     sendSuccess(res, "Drivers fetched successfully", result);

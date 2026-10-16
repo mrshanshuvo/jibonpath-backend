@@ -129,7 +129,98 @@ describe("Payment Integration Tests (Stripe & bKash)", () => {
       });
       expect(reqCheck?.status).toBe("COMPLETED");
     });
+
+    it("GET /api/v1/payments/bkash/callback with status=success should execute and redirect browser", async () => {
+      const user = await prisma.user.findFirst({
+        where: { email: `pay_patient_${timestamp}@example.com` },
+      });
+      const cbReq = await prisma.emergencyRequest.create({
+        data: {
+          callerId: user!.id,
+          pickupAddress: "Dhanmondi 27, Dhaka",
+          priority: "HIGH",
+          status: "DISPATCHED",
+        },
+      });
+
+      const cbPaymentID = `BK_CB_${Date.now()}`;
+      await prisma.payment.create({
+        data: {
+          requestId: cbReq.id,
+          amount: 1500,
+          currency: "BDT",
+          gateway: "BKASH",
+          sessionId: cbPaymentID,
+          status: "PENDING",
+        },
+      });
+
+      const res = await request(app)
+        .get(
+          `/api/v1/payments/bkash/callback?paymentID=${cbPaymentID}&status=success`,
+        )
+        .set("Accept", "text/html,application/xhtml+xml");
+
+      expect(res.status).toBe(302);
+      expect(res.header.location).toContain("/payment/success");
+      expect(res.header.location).toContain(`paymentID=${cbPaymentID}`);
+      expect(res.header.location).toContain("gateway=BKASH");
+
+      const paymentCheck = await prisma.payment.findFirst({
+        where: { sessionId: cbPaymentID },
+      });
+      expect(paymentCheck?.status).toBe("SUCCESS");
+      expect(paymentCheck?.gatewayTxnId).toBeDefined();
+
+      const reqCheck = await prisma.emergencyRequest.findUnique({
+        where: { id: cbReq.id },
+      });
+      expect(reqCheck?.status).toBe("COMPLETED");
+    });
+
+    it("GET /api/v1/payments/bkash/callback with status=failure should redirect to /payment/cancel", async () => {
+      const user = await prisma.user.findFirst({
+        where: { email: `pay_patient_${timestamp}@example.com` },
+      });
+      const failReq = await prisma.emergencyRequest.create({
+        data: {
+          callerId: user!.id,
+          pickupAddress: "Mirpur 10, Dhaka",
+          priority: "HIGH",
+          status: "DISPATCHED",
+        },
+      });
+
+      const failPaymentID = `BK_FAIL_${Date.now()}`;
+      await prisma.payment.create({
+        data: {
+          requestId: failReq.id,
+          amount: 1500,
+          currency: "BDT",
+          gateway: "BKASH",
+          sessionId: failPaymentID,
+          status: "PENDING",
+        },
+      });
+
+      const res = await request(app)
+        .get(
+          `/api/v1/payments/bkash/callback?paymentID=${failPaymentID}&status=failure`,
+        )
+        .set("Accept", "text/html,application/xhtml+xml");
+
+      expect(res.status).toBe(302);
+      expect(res.header.location).toContain("/payment/cancel");
+      expect(res.header.location).toContain("status=failure");
+      expect(res.header.location).toContain(`paymentID=${failPaymentID}`);
+
+      const paymentCheck = await prisma.payment.findFirst({
+        where: { sessionId: failPaymentID },
+      });
+      expect(paymentCheck?.status).toBe("FAILED");
+    });
   });
+
 
   describe("SSLCommerz Gateway Integration", () => {
     let sslRequestId = "";

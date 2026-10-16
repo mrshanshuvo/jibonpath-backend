@@ -25,6 +25,8 @@ export const updateHospitalSchema = z.object({
 export const listHospitalSchema = z.object({
   query: z.object({
     name: z.string().optional(),
+    search: z.string().optional(),
+    q: z.string().optional(),
     page: z.string().optional(),
     limit: z.string().optional(),
   }),

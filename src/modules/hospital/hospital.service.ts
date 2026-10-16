@@ -1,7 +1,7 @@
 import type { Request } from "express";
 import { prisma } from "../../config/db";
 import { AppError } from "../../utils/AppError";
-import { buildMeta, getPagination } from "../../utils/pagination";
+import { createPaginatedResponse, getPagination } from "../../utils/pagination";
 import type {
   CreateHospitalInput,
   UpdateHospitalInput,
@@ -12,15 +12,23 @@ export const createHospital = async (data: CreateHospitalInput) => {
 };
 
 export const listHospitals = async (req: Request) => {
-  const { page, limit, skip } = getPagination(req);
+  const { limit, skip, search } = getPagination(req);
   const { name } = req.query as { name?: string };
 
-  const where = {
+  const queryTerm =
+    search || (typeof name === "string" ? name.trim() : undefined);
+
+  const where: Record<string, unknown> = {
     deletedAt: null,
-    ...(name && {
-      name: { contains: name, mode: "insensitive" as const },
-    }),
   };
+
+  if (queryTerm) {
+    where.OR = [
+      { name: { contains: queryTerm, mode: "insensitive" } },
+      { address: { contains: queryTerm, mode: "insensitive" } },
+      { phone: { contains: queryTerm, mode: "insensitive" } },
+    ];
+  }
 
   const [hospitals, total] = await Promise.all([
     prisma.hospital.findMany({
@@ -32,7 +40,7 @@ export const listHospitals = async (req: Request) => {
     prisma.hospital.count({ where }),
   ]);
 
-  return { hospitals, meta: buildMeta(page, limit, total) };
+  return createPaginatedResponse(req, hospitals, total, "hospitals");
 };
 
 export const getHospitalById = async (id: string) => {

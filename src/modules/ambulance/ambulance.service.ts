@@ -1,7 +1,7 @@
 import type { Request } from "express";
 import { prisma } from "../../config/db";
 import { AppError } from "../../utils/AppError";
-import { buildMeta, getPagination } from "../../utils/pagination";
+import { createPaginatedResponse, getPagination } from "../../utils/pagination";
 import type {
   CreateAmbulanceInput,
   UpdateAmbulanceInput,
@@ -17,14 +17,29 @@ export const createAmbulance = async (data: CreateAmbulanceInput) => {
 };
 
 export const listAmbulances = async (req: Request) => {
-  const { page, limit, skip } = getPagination(req);
+  const { limit, skip, search } = getPagination(req);
   const { status, type } = req.query as { status?: string; type?: string };
 
-  const where = {
+  const where: Record<string, unknown> = {
     deletedAt: null,
-    ...(status && { status: status as never }),
-    ...(type && { type: type as never }),
+    ...(status && status !== "ALL" && { status: status as never }),
+    ...(type && type !== "ALL" && { type: type as never }),
   };
+
+  if (search) {
+    where.OR = [
+      { vehicleNumber: { contains: search, mode: "insensitive" } },
+      { make: { contains: search, mode: "insensitive" } },
+      { driver: { licenseNumber: { contains: search, mode: "insensitive" } } },
+      { driver: { user: { name: { contains: search, mode: "insensitive" } } } },
+      {
+        driver: { user: { email: { contains: search, mode: "insensitive" } } },
+      },
+      {
+        driver: { user: { phone: { contains: search, mode: "insensitive" } } },
+      },
+    ];
+  }
 
   const [ambulances, total] = await Promise.all([
     prisma.ambulance.findMany({
@@ -33,13 +48,17 @@ export const listAmbulances = async (req: Request) => {
       take: limit,
       orderBy: { createdAt: "desc" },
       include: {
-        driver: { include: { user: { select: { name: true, phone: true } } } },
+        driver: {
+          include: {
+            user: { select: { name: true, email: true, phone: true } },
+          },
+        },
       },
     }),
     prisma.ambulance.count({ where }),
   ]);
 
-  return { ambulances, meta: buildMeta(page, limit, total) };
+  return createPaginatedResponse(req, ambulances, total, "ambulances");
 };
 
 export const getAmbulanceById = async (id: string) => {

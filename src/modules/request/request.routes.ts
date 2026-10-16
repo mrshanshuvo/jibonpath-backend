@@ -16,6 +16,7 @@ router.get(
   "/my",
   authenticate,
   authorize("PATIENT"),
+  validate(listRequestSchema),
   asyncHandler(async (req, res) => {
     if (!req.user?.userId) throw new AppError("Unauthorized", 401);
     const result = await requestService.getMyRequests(req.user.userId, req);

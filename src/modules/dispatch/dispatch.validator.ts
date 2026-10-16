@@ -37,6 +37,8 @@ export const listDispatchesQuerySchema = z.object({
           "COMPLETED",
         ])
         .optional(),
+      search: z.string().optional(),
+      q: z.string().optional(),
       page: z
         .string()
         .regex(/^\d+$/, "Page must be a positive number")
