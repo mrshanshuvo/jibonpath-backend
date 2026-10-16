@@ -4,9 +4,9 @@
   "description": "Emergency Ambulance Dispatch System Backend API (Express.js, TypeScript, PostgreSQL, Prisma)",
   "main": "dist/server.js",
   "scripts": {
-    "dev": "node api.js && tsx watch src/server.ts",
-    "build": "node api.js && prisma generate && tsc",
-    "start": "node api.js && node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "build": "prisma generate && tsc",
+    "start": "node dist/server.js",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "tsx src/prisma/seed.ts",
