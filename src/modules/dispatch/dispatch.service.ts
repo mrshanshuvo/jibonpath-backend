@@ -1,14 +1,14 @@
 import type { Request } from "express";
 import { prisma } from "../../config/db";
 import { AppError } from "../../utils/AppError";
-import { createPaginatedResponse, getPagination } from "../../utils/pagination";
 import { calculateTripFare } from "../../utils/fareCalculator";
+import { createPaginatedResponse, getPagination } from "../../utils/pagination";
 import type {
   CreateDispatchInput,
   RecordLocationInput,
   UpdateDispatchStatusInput,
 } from "./dispatch.validator";
-import { telemetryStore, type TelemetryTick } from "./telemetry.store";
+import { type TelemetryTick, telemetryStore } from "./telemetry.store";
 
 export const createDispatch = async (data: CreateDispatchInput) => {
   return prisma.$transaction(async (tx) => {
@@ -64,7 +64,11 @@ export const createDispatch = async (data: CreateDispatchInput) => {
   });
 };
 
-export const getDispatchById = async (id: string, requesterUserId?: string, requesterRole?: string) => {
+export const getDispatchById = async (
+  id: string,
+  requesterUserId?: string,
+  requesterRole?: string,
+) => {
   const dispatch = await prisma.dispatch.findUnique({
     where: { id },
     include: {
@@ -124,15 +128,26 @@ export const getDispatchById = async (id: string, requesterUserId?: string, requ
   if (!dispatch) throw new AppError("Dispatch not found", 404);
 
   // If requester is a PATIENT, ensure they own the request
-  if (requesterRole === "PATIENT" && requesterUserId && dispatch.request.callerId !== requesterUserId) {
-    throw new AppError("Forbidden: You do not have permission to view this dispatch", 403);
+  if (
+    requesterRole === "PATIENT" &&
+    requesterUserId &&
+    dispatch.request.callerId !== requesterUserId
+  ) {
+    throw new AppError(
+      "Forbidden: You do not have permission to view this dispatch",
+      403,
+    );
   }
 
   const latestTelemetry = await telemetryStore.getLatestTelemetry(id);
   return { ...dispatch, latestTelemetry };
 };
 
-export const getDispatchByRequestId = async (requestId: string, requesterUserId?: string, requesterRole?: string) => {
+export const getDispatchByRequestId = async (
+  requestId: string,
+  requesterUserId?: string,
+  requesterRole?: string,
+) => {
   const dispatch = await prisma.dispatch.findUnique({
     where: { requestId },
     include: {
@@ -190,10 +205,18 @@ export const getDispatchByRequestId = async (requestId: string, requesterUserId?
     },
   });
 
-  if (!dispatch) throw new AppError("Dispatch for this request was not found", 404);
+  if (!dispatch)
+    throw new AppError("Dispatch for this request was not found", 404);
 
-  if (requesterRole === "PATIENT" && requesterUserId && dispatch.request.callerId !== requesterUserId) {
-    throw new AppError("Forbidden: You do not have permission to view this dispatch", 403);
+  if (
+    requesterRole === "PATIENT" &&
+    requesterUserId &&
+    dispatch.request.callerId !== requesterUserId
+  ) {
+    throw new AppError(
+      "Forbidden: You do not have permission to view this dispatch",
+      403,
+    );
   }
 
   const latestTelemetry = await telemetryStore.getLatestTelemetry(dispatch.id);
@@ -214,7 +237,10 @@ export const recordLocation = async (
   if (!dispatch) throw new AppError("Dispatch not found", 404);
 
   if (actorRole === "DRIVER" && dispatch.driver.userId !== actorUserId) {
-    throw new AppError("Forbidden: You are not the driver assigned to this dispatch", 403);
+    throw new AppError(
+      "Forbidden: You are not the driver assigned to this dispatch",
+      403,
+    );
   }
 
   const tick: TelemetryTick = {
