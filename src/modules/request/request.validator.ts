@@ -9,8 +9,6 @@ export const createRequestSchema = z.object({
     contactPhone: z.string().optional(),
     hospitalName: z.string().optional(),
     description: z.string().optional(),
-    contactPhone: z.string().optional(),
-    hospitalName: z.string().optional(),
   }),
 });
 
