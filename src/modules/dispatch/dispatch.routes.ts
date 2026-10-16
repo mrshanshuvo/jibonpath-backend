@@ -111,6 +111,50 @@ router.get(
   }),
 );
 
+// GET /api/v1/dispatches/telemetry/feed — Master Fleet Radar SSE stream for ADMIN
+router.get(
+  "/telemetry/feed",
+  authenticate,
+  authorize("ADMIN"),
+  asyncHandler(async (_req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+
+    // Initial connection ack with all active cached ticks
+    const cachedTicks = telemetryStore.getAllCachedTelemetry();
+    res.write(
+      `data: ${JSON.stringify({
+        type: "connected",
+        activeCount: cachedTicks.length,
+        ticks: cachedTicks,
+      })}\n\n`,
+    );
+
+    // Subscribe to all fleet coordinate ticks
+    const unsubscribe = telemetryStore.subscribeAllTelemetry((tick) => {
+      res.write(
+        `data: ${JSON.stringify({
+          type: "telemetry",
+          ...tick,
+        })}\n\n`,
+      );
+    });
+
+    const keepAliveTimer = setInterval(() => {
+      res.write(": keep-alive\n\n");
+    }, 15000);
+
+    res.on("close", () => {
+      clearInterval(keepAliveTimer);
+      unsubscribe();
+      res.end();
+    });
+  }),
+);
+
 // GET /api/v1/dispatches/:id/telemetry/stream — SSE coordinate stream
 router.get(
   "/:id/telemetry/stream",

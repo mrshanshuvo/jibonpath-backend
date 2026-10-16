@@ -28,6 +28,8 @@ class TelemetryStore {
 
     // Broadcast immediately to SSE subscribers
     this.emitter.emit(`telemetry:${tick.dispatchId}`, tick);
+    // Broadcast to global fleet CAD radar subscribers
+    this.emitter.emit("telemetry:all", tick);
 
     // Optional Redis cache persistence with 120-second TTL
     if (redisClient && redisClient.status === "ready") {
@@ -81,6 +83,25 @@ class TelemetryStore {
     return () => {
       this.emitter.off(eventName, listener);
     };
+  }
+
+  /**
+   * Subscribe to real-time coordinates for ALL dispatches (Admin Master CAD stream).
+   */
+  subscribeAllTelemetry(listener: (tick: TelemetryTick) => void): () => void {
+    const eventName = "telemetry:all";
+    this.emitter.on(eventName, listener);
+
+    return () => {
+      this.emitter.off(eventName, listener);
+    };
+  }
+
+  /**
+   * Get all currently cached telemetry ticks across the fleet.
+   */
+  getAllCachedTelemetry(): TelemetryTick[] {
+    return Array.from(this.inMemoryCache.values());
   }
 
   /**

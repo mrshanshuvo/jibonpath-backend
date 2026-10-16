@@ -422,8 +422,18 @@ export const listDispatches = async (req: Request) => {
           select: {
             id: true,
             pickupAddress: true,
+            pickupLat: true,
+            pickupLng: true,
             priority: true,
             status: true,
+            description: true,
+            caller: {
+              select: {
+                id: true,
+                name: true,
+                phone: true,
+              },
+            },
             payment: {
               select: {
                 id: true,
@@ -441,13 +451,28 @@ export const listDispatches = async (req: Request) => {
             id: true,
             name: true,
             address: true,
+            lat: true,
+            lng: true,
+            phone: true,
           },
         },
       },
     }),
   ]);
 
-  return createPaginatedResponse(req, dispatches, total, "dispatches");
+  const dispatchesWithTelemetry = await Promise.all(
+    dispatches.map(async (d) => {
+      const latestTelemetry = await telemetryStore.getLatestTelemetry(d.id);
+      return { ...d, latestTelemetry };
+    }),
+  );
+
+  return createPaginatedResponse(
+    req,
+    dispatchesWithTelemetry,
+    total,
+    "dispatches",
+  );
 };
 
 export const getMyActiveDispatch = async (userId: string) => {
