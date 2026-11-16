@@ -109,6 +109,16 @@ class TelemetryStore {
    */
   clear(dispatchId: string) {
     this.inMemoryCache.delete(dispatchId);
+
+    // Notify fleet CAD radar subscribers of mission completion
+    this.emitter.emit("telemetry:all", {
+      dispatchId,
+      lat: 0,
+      lng: 0,
+      stage: "COMPLETED",
+      updatedAt: new Date().toISOString(),
+    });
+
     if (redisClient && redisClient.status === "ready") {
       redisClient.del(`dispatch:${dispatchId}:telemetry`).catch(() => {});
     }

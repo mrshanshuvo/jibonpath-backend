@@ -116,7 +116,7 @@ router.get(
   "/telemetry/feed",
   authenticate,
   authorize("ADMIN"),
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
@@ -147,11 +147,21 @@ router.get(
       res.write(": keep-alive\n\n");
     }, 15000);
 
-    res.on("close", () => {
+    let isCleanedUp = false;
+    const cleanup = () => {
+      if (isCleanedUp) return;
+      isCleanedUp = true;
       clearInterval(keepAliveTimer);
       unsubscribe();
-      res.end();
-    });
+      try {
+        res.end();
+      } catch {
+        // Response already ended
+      }
+    };
+
+    req.on("close", cleanup);
+    res.on("close", cleanup);
   }),
 );
 
