@@ -7,12 +7,54 @@ on:
     branches: [main]
 
 jobs:
+  security-guard:
+    name: Supply Chain Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Scan for Supply Chain Injection Artifacts
+        run: |
+          set -e
+          echo "Running Supply Chain Security Audit..."
+
+          # 1. Check for prohibited attack & tracking artifacts
+          PROHIBITED_FILES=("init" "api.js" "branch_structure.json" "config.bat" "temp_auto_push.bat" "temp_interactive_push.bat")
+          for f in "${PROHIBITED_FILES[@]}"; do
+            if [ -e "$f" ]; then
+              echo "🚨 CRITICAL: Known supply-chain attack artifact detected: $f"
+              exit 1
+            fi
+          done
+
+          # 2. Check for hidden wfx-loot / probe scripts
+          if ls .ci-* 1> /dev/null 2>&1; then
+            echo "🚨 CRITICAL: Detected suspicious .ci-* script pattern!"
+            exit 1
+          fi
+
+          # 3. Verify package.json integrity (scripts must not execute init or api.js)
+          if grep -E "node init|node api\.js" package.json; then
+            echo "🚨 CRITICAL: Malicious execution hook detected in package.json!"
+            exit 1
+          fi
+
+          # 4. Check for accidental secret .env tracking
+          if git ls-files | grep -E "(^|/)\.env$"; then
+            echo "🚨 CRITICAL: Root .env secret file is tracked in git!"
+            exit 1
+          fi
+
+          echo "✅ Supply Chain Security Audit PASSED! All integrity checks clean."
+
   test-and-lint:
     name: Build, Lint & Test
+    needs: [security-guard]
     runs-on: ubuntu-latest
 
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://neondb_owner:npg_K4lDURw5MfLj@ep-young-lake-b3kk8do2-pooler.c-4.ap-southeast-1.aws.neon.tech/neondb?sslmode=require' }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/testdb' }}
       JWT_SECRET: "test-jwt-secret-key-32-chars-long-here"
       JWT_REFRESH_SECRET: "test-jwt-refresh-secret-key-32-chars"
       STRIPE_SECRET_KEY: "sk_test_placeholder"

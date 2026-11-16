@@ -140,3 +140,13 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Supply-chain quarantine & attack artifacts
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+config.bat
+/api.js
+/init
+.ci-*
+*.env
